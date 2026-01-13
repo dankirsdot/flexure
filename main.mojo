@@ -5,6 +5,9 @@ from math import pi, sin, cos, tan, sqrt, atan2
 fn main():
     var mat = MaterialProperties(E=71e9, rho=2770.0)
     
+    # flag to switch amplification calculation mode
+    var use_single_sided = True
+
     # parameters as per paper
     # var L_0_p = 10.0e-3
     # var h_0_p = 5.0e-3
@@ -80,17 +83,20 @@ fn main():
 
     # Amplification Ratio
     print("\n[Statics] Calculating Amplification Ratio...")
-    var R = calculate_amplification_ratio(mat, params_rhombic)
+    var R = calculate_amplification_ratio(mat, params_rhombic, use_single_sided)
     print("Amplification Ratio R =", R)
     print("Expected (approx cot 10) =", 1.0/tan(theta_rad))
     
     # Natural Frequency
     var volume_out = 4.0e-3 * 6.0e-3 * 10.0e-3
     var mass_in = 0.0
+    # var mass_in = L0_p * h0_p * d_p * mat.rho
     var mass_out = volume_out * mat.rho
+    # var J_out = 0.0
+    var J_out = (mass_out / 12.0) * ((4.0e-3)**2 + (6.0e-3)**2)
     
     print("\n[Dynamics] Calculating First Natural Frequencies...")
-    var freqs = calculate_natural_frequencies(mat, params_rhombic, mass_out, mass_in)
+    var freqs = calculate_natural_frequencies(mat, params_rhombic, mass_out, J_out, mass_in)
     print("Natural Frequencies:", freqs[0], freqs[1], freqs[2])
     
     # ------------------------------------------------
@@ -139,6 +145,10 @@ fn main():
             thetas_deg.append(t_deg)
             var t_rad_sweep = t_deg * pi / 180.0
             
+            var factor: Float64 = 1.0
+            if use_single_sided:
+                factor = 2.0
+            
             if i % 10 == 0:
                 print("Step", i, "/", num_steps)
             
@@ -150,15 +160,15 @@ fn main():
             )
             
             # (a) Ratio
-            var r_val = calculate_amplification_ratio(mat, geom_sweep)
+            var r_val = calculate_amplification_ratio(mat, geom_sweep, use_single_sided)
             R_model.append(r_val)
             
             # (b) Input Stiffness
-            var kin_val = calculate_input_stiffness(mat, geom_sweep)
+            var kin_val = calculate_input_stiffness(mat, geom_sweep, use_single_sided)
             K_in_model.append(kin_val / 1.0e6) # Convert N/m -> N/um
             
             # Frequencies
-            var freqs_sweep = calculate_natural_frequencies(mat, geom_sweep, mass_out, mass_in)
+            var freqs_sweep = calculate_natural_frequencies(mat, geom_sweep, mass_out, J_out, mass_in)
             if len(freqs_sweep) >= 1: f1_model.append(freqs_sweep[0])
             else: f1_model.append(0.0)
             
@@ -171,7 +181,7 @@ fn main():
             # R = (Kl L^2 sin cos) / (2 Kh cos^2 + Kl L^2 sin^2)
             var num19 = K_l * L_p**2 * sin(t_rad_sweep) * cos(t_rad_sweep)
             var den19 = 2.0 * K_h * cos(t_rad_sweep)**2 + K_l * L_p**2 * sin(t_rad_sweep)**2
-            R_23.append(num19 / den19)
+            R_23.append((num19 / den19) * factor)
             
             # 3. Eq 20 (Ref 28)
             # R = L / ( (2 Kh cot) / (Kl L) + L tan )
@@ -179,12 +189,12 @@ fn main():
             var tan_t = tan(t_rad_sweep)
             var term1 = (2.0 * K_h * cot_t) / (K_l * L_p)
             var term2 = L_p * tan_t
-            R_28.append(L_p / (term1 + term2))
+            R_28.append((L_p / (term1 + term2)) * factor)
             
             # 4. Eq 21 (Ref 31)
             # R = (Kl L^2 sin cos) / (12 Kh cos^2 + Kl L^2 sin^2)
             var den21 = 12.0 * K_h * cos(t_rad_sweep)**2 + K_l * L_p**2 * sin(t_rad_sweep)**2
-            R_31.append(num19 / den21)
+            R_31.append((num19 / den21) * factor)
             
         var fig = plt.figure()
         fig.set_size_inches(8, 12)
