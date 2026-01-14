@@ -48,9 +48,14 @@ comptime PIEZO_STIFFNESS: Float64 = 100.0e6 # N/m (~100 N/um)
 # ============================================================================
 
 # Input port: Accommodates piezo stack with clearance
-comptime L0_BASE: Float64 = 20.0e-3 # m - horizontal span (18mm stack + 2mm margin)
-comptime H0_BASE: Float64 = 9.0e-3 # m - vertical height (7mm stack + 2mm margin)
-comptime D_BASE: Float64 = 10.0e-3 # m - depth (matches stack width + margin)
+comptime L0_BASE: Float64 = 12.0e-3 # m - vertical input port height
+comptime H0_BASE: Float64 = 5.0e-3 # m - horizontal input port width
+comptime D_BASE: Float64 = 9.0e-3 # m - depth (matches stack width + margin)
+
+# D_BASE sweep parameters
+comptime D_BASE_MIN: Float64 = 8.0e-3 # m (8 mm)
+comptime D_BASE_MAX: Float64 = 10.0e-3 # m (12 mm)
+comptime D_BASE_STEP: Float64 = 0.5e-3 # m (0.5 mm step)
 
 # Limb dimensions
 comptime L_TOTAL: Float64 = 15.0e-3 # m - total limb length
@@ -67,8 +72,8 @@ comptime THETA_MIN: Float64 = -30.0 # degrees (most negative)
 comptime THETA_MAX: Float64 = -0.5 # degrees (avoid singularity near 0)
 comptime THETA_STEPS: Int = 100
 
-comptime H_FLEX_MIN: Float64 = 0.15e-3 # m (0.15 mm)
-comptime H_FLEX_MAX: Float64 = 1.2e-3 # m (1.2 mm)
+comptime H_FLEX_MIN: Float64 = 1.0e-3 # m (1 mm)
+comptime H_FLEX_MAX: Float64 = 5.0e-3 # m (5 mm)
 comptime H_FLEX_STEPS: Int = 100
 
 
@@ -99,7 +104,7 @@ fn get_input_port() -> InputPortParams:
 # Geometry Factories for Negative Theta
 # ============================================================================
 
-fn make_rhombic_geometry(theta_deg: Float64, h_flex: Float64) -> GeometricParameters:
+fn make_rhombic_geometry(theta_deg: Float64, h_flex: Float64, d: Float64) -> GeometricParameters:
     """
     Create rhombic geometry with negative theta.
     
@@ -108,14 +113,14 @@ fn make_rhombic_geometry(theta_deg: Float64, h_flex: Float64) -> GeometricParame
     return rhombic(
         L=L_TOTAL,
         h=h_flex,
-        d=D_BASE,
+        d=d,
         theta_deg=theta_deg,
         L_flex=L_FLEX,
         input_port=get_input_port(),
     )
 
 
-fn make_parallel_geometry(theta_deg: Float64, h_flex: Float64) -> GeometricParameters:
+fn make_parallel_geometry(theta_deg: Float64, h_flex: Float64, d: Float64) -> GeometricParameters:
     """
     Create parallel geometry with negative theta.
     
@@ -131,13 +136,13 @@ fn make_parallel_geometry(theta_deg: Float64, h_flex: Float64) -> GeometricParam
         L_link=L_LINK,
         h_flex=h_flex,
         h_link=H_LINK,
-        d=D_BASE,
+        d=d,
         H=H,
         input_port=get_input_port(),
     )
 
 
-fn make_aligned_geometry(theta_deg: Float64, h_flex: Float64) -> GeometricParameters:
+fn make_aligned_geometry(theta_deg: Float64, h_flex: Float64, d: Float64) -> GeometricParameters:
     """
     Create aligned geometry with negative theta.
     
@@ -148,7 +153,7 @@ fn make_aligned_geometry(theta_deg: Float64, h_flex: Float64) -> GeometricParame
         L_link=L_LINK,
         h_flex=h_flex,
         h_link=H_LINK,
-        d=D_BASE,
+        d=d,
         theta_deg=theta_deg,
         input_port=get_input_port(),
     )
@@ -251,6 +256,7 @@ struct DesignResult(Copyable, Movable):
 fn run_2d_sweep(
     mat: MaterialProperties,
     structure: String,
+    d: Float64,
     verbose: Bool = True,
 ) -> List[DesignResult]:
     """
@@ -259,6 +265,7 @@ fn run_2d_sweep(
     Args:
         mat: Material properties.
         structure: "rhombic", "parallel", or "aligned".
+        d: Depth dimension in meters.
         verbose: Print progress updates.
     
     Returns:
@@ -279,11 +286,11 @@ fn run_2d_sweep(
             # Create geometry based on structure type
             var geom: GeometricParameters
             if structure == "rhombic":
-                geom = make_rhombic_geometry(theta_deg, h_flex)
+                geom = make_rhombic_geometry(theta_deg, h_flex, d)
             elif structure == "parallel":
-                geom = make_parallel_geometry(theta_deg, h_flex)
+                geom = make_parallel_geometry(theta_deg, h_flex, d)
             else: # aligned
-                geom = make_aligned_geometry(theta_deg, h_flex)
+                geom = make_aligned_geometry(theta_deg, h_flex, d)
             
             # Compute analysis
             var analysis = compute_results(
@@ -322,15 +329,17 @@ fn run_2d_sweep(
 # Plotting Functions
 # ============================================================================
 
-fn plot_design_contours(
+fn plot_ratio_stiffness_contours(
     results: List[DesignResult],
     structure: String,
     material_name: String,
+    d_mm: Float64,
 ) raises:
     """
-    Generate 5-panel contour plot for a structure/material combination.
+    Generate 2-panel contour plot for ratio and stiffness.
     
-    Panels: (a) Ratio, (b) Stiffness, (c) f1, (d) f2, (e) f3
+    Panels: (a) Amplification Ratio, (b) Input Stiffness
+    Both plots are square aspect ratio.
     """
     var plt = Python.import_module("matplotlib.pyplot")
     var np = Python.import_module("numpy")
@@ -343,45 +352,34 @@ fn plot_design_contours(
     # Build 2D data as nested Python lists
     var ratio_rows = builtins.list()
     var stiff_rows = builtins.list()
-    var f1_rows = builtins.list()
-    var f2_rows = builtins.list()
-    var f3_rows = builtins.list()
     
     for i in range(THETA_STEPS):
         var ratio_row = builtins.list()
         var stiff_row = builtins.list()
-        var f1_row = builtins.list()
-        var f2_row = builtins.list()
-        var f3_row = builtins.list()
         
         for j in range(H_FLEX_STEPS):
             var idx = i * H_FLEX_STEPS + j
             ratio_row.append(results[idx].ratio)
             stiff_row.append(results[idx].stiffness)
-            f1_row.append(results[idx].f1)
-            f2_row.append(results[idx].f2)
-            f3_row.append(results[idx].f3)
         
         ratio_rows.append(ratio_row)
         stiff_rows.append(stiff_row)
-        f1_rows.append(f1_row)
-        f2_rows.append(f2_row)
-        f3_rows.append(f3_row)
     
     # Convert to numpy arrays
     var ratio_grid = np.abs(np.array(ratio_rows))
     var stiff_grid = np.array(stiff_rows)
-    var f1_grid = np.array(f1_rows)
-    var f2_grid = np.array(f2_rows)
-    var f3_grid = np.array(f3_rows)
     
-    # Create figure with 5 subplots (2 rows, 3 columns, last slot empty)
-    var fig = plt.figure()
-    fig.set_size_inches(14, 10)
-    fig.suptitle(structure.upper() + " Amplifier - " + material_name, fontsize=14)
+    # Create figure with 2 square subplots (1 row x 2 columns)
+    var fig_info = plt.subplots(1, 2)
+    var fig = fig_info[0]
+    var axes = fig_info[1]
+    fig.set_size_inches(10, 5)
+    
+    var d_str = String(d_mm)
+    fig.suptitle(structure.upper() + " Amplifier - " + material_name + " (d=" + d_str + "mm)", fontsize=14)
     
     # Subplot (a): Amplification Ratio
-    var ax1 = plt.subplot(2, 3, 1)
+    var ax1 = axes[0]
     var c1 = ax1.contourf(theta_vals, h_vals, ratio_grid.T, 20)
     plt.colorbar(c1, ax=ax1)
     ax1.set_xlabel(String("theta (deg)"))
@@ -389,40 +387,102 @@ fn plot_design_contours(
     ax1.set_title(String("(a) Amplification Ratio"))
     
     # Subplot (b): Input Stiffness
-    var ax2 = plt.subplot(2, 3, 2)
+    var ax2 = axes[1]
     var c2 = ax2.contourf(theta_vals, h_vals, stiff_grid.T, 20)
     plt.colorbar(c2, ax=ax2)
     ax2.set_xlabel(String("theta (deg)"))
     ax2.set_ylabel(String("h_flex (mm)"))
     ax2.set_title(String("(b) Input Stiffness (N/um)"))
     
-    # Subplot (c): f1
-    var ax3 = plt.subplot(2, 3, 3)
-    var c3 = ax3.contourf(theta_vals, h_vals, f1_grid.T, 20)
+    plt.tight_layout()
+    
+    var filename = structure + "_" + material_name.replace(" ", "_") + "_d_" + d_str + "mm_mechanics.png"
+    plt.savefig(filename, dpi=150)
+    print("Saved:", filename)
+    _ = plt.close(fig)
+
+
+fn plot_frequency_contours(
+    results: List[DesignResult],
+    structure: String,
+    material_name: String,
+    d_mm: Float64,
+) raises:
+    """
+    Generate 3-panel contour plot for natural frequencies.
+    
+    Panels: (a) f1, (b) f2, (c) f3
+    Horizontal layout (1 row x 3 columns).
+    """
+    var plt = Python.import_module("matplotlib.pyplot")
+    var np = Python.import_module("numpy")
+    var builtins = Python.import_module("builtins")
+    
+    # Create numpy arrays for contour plot
+    var theta_vals = np.linspace(THETA_MIN, THETA_MAX, THETA_STEPS)
+    var h_vals = np.linspace(H_FLEX_MIN * 1000.0, H_FLEX_MAX * 1000.0, H_FLEX_STEPS)
+    
+    # Build 2D data as nested Python lists
+    var f1_rows = builtins.list()
+    var f2_rows = builtins.list()
+    var f3_rows = builtins.list()
+    
+    for i in range(THETA_STEPS):
+        var f1_row = builtins.list()
+        var f2_row = builtins.list()
+        var f3_row = builtins.list()
+        
+        for j in range(H_FLEX_STEPS):
+            var idx = i * H_FLEX_STEPS + j
+            f1_row.append(results[idx].f1)
+            f2_row.append(results[idx].f2)
+            f3_row.append(results[idx].f3)
+        
+        f1_rows.append(f1_row)
+        f2_rows.append(f2_row)
+        f3_rows.append(f3_row)
+    
+    # Convert to numpy arrays
+    var f1_grid = np.array(f1_rows)
+    var f2_grid = np.array(f2_rows)
+    var f3_grid = np.array(f3_rows)
+    
+    # Create figure with 3 subplots (1 row x 3 columns)
+    var fig_info = plt.subplots(1, 3)
+    var fig = fig_info[0]
+    var axes = fig_info[1]
+    fig.set_size_inches(15, 5)
+    
+    var d_str = String(d_mm)
+    fig.suptitle(structure.upper() + " Amplifier - " + material_name + " (d=" + d_str + "mm) - Natural Frequencies", fontsize=14)
+    
+    # Subplot (a): f1
+    var ax1 = axes[0]
+    var c1 = ax1.contourf(theta_vals, h_vals, f1_grid.T, 20)
+    plt.colorbar(c1, ax=ax1)
+    ax1.set_xlabel(String("theta (deg)"))
+    ax1.set_ylabel(String("h_flex (mm)"))
+    ax1.set_title(String("(a) f1 (Hz)"))
+    
+    # Subplot (b): f2
+    var ax2 = axes[1]
+    var c2 = ax2.contourf(theta_vals, h_vals, f2_grid.T, 20)
+    plt.colorbar(c2, ax=ax2)
+    ax2.set_xlabel(String("theta (deg)"))
+    ax2.set_ylabel(String("h_flex (mm)"))
+    ax2.set_title(String("(b) f2 (Hz)"))
+    
+    # Subplot (c): f3
+    var ax3 = axes[2]
+    var c3 = ax3.contourf(theta_vals, h_vals, f3_grid.T, 20)
     plt.colorbar(c3, ax=ax3)
     ax3.set_xlabel(String("theta (deg)"))
     ax3.set_ylabel(String("h_flex (mm)"))
-    ax3.set_title(String("(c) f1 (Hz)"))
-    
-    # Subplot (d): f2
-    var ax4 = plt.subplot(2, 3, 4)
-    var c4 = ax4.contourf(theta_vals, h_vals, f2_grid.T, 20)
-    plt.colorbar(c4, ax=ax4)
-    ax4.set_xlabel(String("theta (deg)"))
-    ax4.set_ylabel(String("h_flex (mm)"))
-    ax4.set_title(String("(d) f2 (Hz)"))
-    
-    # Subplot (e): f3
-    var ax5 = plt.subplot(2, 3, 5)
-    var c5 = ax5.contourf(theta_vals, h_vals, f3_grid.T, 20)
-    plt.colorbar(c5, ax=ax5)
-    ax5.set_xlabel(String("theta (deg)"))
-    ax5.set_ylabel(String("h_flex (mm)"))
-    ax5.set_title(String("(e) f3 (Hz)"))
+    ax3.set_title(String("(c) f3 (Hz)"))
     
     plt.tight_layout()
     
-    var filename = structure + "_" + material_name.replace(" ", "_") + "_design.png"
+    var filename = structure + "_" + material_name.replace(" ", "_") + "_d_" + d_str + "mm_frequencies.png"
     plt.savefig(filename, dpi=150)
     print("Saved:", filename)
     _ = plt.close(fig)
@@ -501,77 +561,90 @@ fn main():
     """Run full design exploration."""
     print("\n" + "#" * 70)
     print("#  PIEZO AMPLIFIER DESIGN EXPLORATION")
-    print("#  Stack: SCL070718 (7x7x18mm, ~22um stroke)")
+    print("#  Stack: SCL070718 (7x7x18mm, ~24um stroke)")
     print("#" * 70)
     
     # Define materials and structures to explore
     var structures = List[String]()
-    structures.append("rhombic")
-    structures.append("parallel")
+    # structures.append("rhombic")
+    # structures.append("parallel")
     structures.append("aligned")
     
     # Material info (name, properties pairs)
     var mat_names = List[String]()
     mat_names.append("Al6061")
-    mat_names.append("Al7075")
-    mat_names.append("SS304")
-    mat_names.append("SS17-4PH")
-    mat_names.append("Ti6Al4V")
-    mat_names.append("BeCu")
-    mat_names.append("Invar36")
+    # mat_names.append("Al7075")
+    # mat_names.append("SS304")
+    # mat_names.append("SS17-4PH")
+    # mat_names.append("Ti6Al4V")
+    # mat_names.append("BeCu")
+    # mat_names.append("Invar36")
     
     # var output_mass = get_design_output_mass()
     
     # Collect all top results for final ranking
     var all_top_results = List[DesignResult]()
+    var total_plots = 0
     
-    # Run sweeps for each combination
-    for s_idx in range(len(structures)):
-        var structure = structures[s_idx]
+    # Outer loop over D_BASE values
+    var d = D_BASE_MIN
+    while d <= D_BASE_MAX + 1e-6:
+        var d_mm = d * 1000.0
+        print("\n" + "=" * 70)
+        print("D_BASE =", d_mm, "mm")
+        print("=" * 70)
         
-        for m_idx in range(len(mat_names)):
-            var mat_name = mat_names[m_idx]
-            var mat: MaterialProperties
+        # Run sweeps for each combination
+        for s_idx in range(len(structures)):
+            var structure = structures[s_idx]
             
-            if mat_name == "Al6061":
-                mat = aluminum_6061()
-            elif mat_name == "Al7075":
-                mat = aluminum_7075()
-            elif mat_name == "SS304":
-                mat = steel_304ss()
-            elif mat_name == "SS17-4PH":
-                mat = steel_17_4ph()
-            elif mat_name == "Ti6Al4V":
-                mat = titanium_ti6al4v()
-            elif mat_name == "BeCu":
-                mat = beryllium_copper()
-            else:
-                mat = invar_36()
-            
-            print("\n" + "-" * 50)
-            print("Running:", structure, "-", mat_name)
-            print("-" * 50)
-            
-            # Run 2D sweep
-            var results = run_2d_sweep(mat, structure, verbose=True)
-            
-            # Generate contour plots
-            try:
-                plot_design_contours(results, structure, mat_name)
-            except e:
-                print("Plotting error:", e)
-            
-            # Find best configurations
-            var best = find_best_configurations(results, structure, mat_name, top_n=3)
-            print("Found", len(best), "configurations meeting constraints")
-            
-            # Add to global ranking
-            for i in range(len(best)):
-                all_top_results.append(best[i].copy())
+            for m_idx in range(len(mat_names)):
+                var mat_name = mat_names[m_idx]
+                var mat: MaterialProperties
+                
+                if mat_name == "Al6061":
+                    mat = aluminum_6061()
+                elif mat_name == "Al7075":
+                    mat = aluminum_7075()
+                elif mat_name == "SS304":
+                    mat = steel_304ss()
+                elif mat_name == "SS17-4PH":
+                    mat = steel_17_4ph()
+                elif mat_name == "Ti6Al4V":
+                    mat = titanium_ti6al4v()
+                elif mat_name == "BeCu":
+                    mat = beryllium_copper()
+                else:
+                    mat = invar_36()
+                
+                print("\n" + "-" * 50)
+                print("Running:", structure, "-", mat_name, "- d =", d_mm, "mm")
+                print("-" * 50)
+                
+                # Run 2D sweep
+                var results = run_2d_sweep(mat, structure, d, verbose=True)
+                
+                # Generate contour plots (2 separate files)
+                try:
+                    plot_ratio_stiffness_contours(results, structure, mat_name, d_mm)
+                    plot_frequency_contours(results, structure, mat_name, d_mm)
+                    total_plots += 2
+                except e:
+                    print("Plotting error:", e)
+                
+                # Find best configurations
+                var best = find_best_configurations(results, structure, mat_name, top_n=3)
+                print("Found", len(best), "configurations meeting constraints")
+                
+                # Add to global ranking
+                for i in range(len(best)):
+                    all_top_results.append(best[i].copy())
+        
+        d += D_BASE_STEP
     
     # Print summary
     print("\n" + "#" * 70)
     print("#  DESIGN EXPLORATION COMPLETE")
     print("#" * 70)
-    print("\nGenerated", len(structures) * len(mat_names), "contour plot files")
+    print("\nGenerated", total_plots, "contour plot files")
     print("Total configurations meeting constraints:", len(all_top_results))

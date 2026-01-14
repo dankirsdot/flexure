@@ -33,11 +33,11 @@ struct InputPortParams(Copyable, Movable):
     actuation point to the first flexure. Default values match the paper.
     
     Attributes:
-        L0: Length of input block in x-direction (m).
-        h0: Height of input block in y-direction (m).
+        L0: Vertical length of input port in y-direction (m).
+        h0: Horizontal width of input port in x-direction (m).
     """
-    var L0: Float64
-    var h0: Float64
+    var L0: Float64  # Vertical (y-direction)
+    var h0: Float64  # Horizontal (x-direction)
 
 
 fn default_input_port() -> InputPortParams:
