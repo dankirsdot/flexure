@@ -1,5 +1,6 @@
 from math import pi, sin, cos, sinh, cosh, sqrt, tan, atan2
 
+
 @fieldwise_init
 struct GeometricParameters(Copyable):
     var L_1: Float64
@@ -57,6 +58,7 @@ struct GeometricParameters(Copyable):
             d=self.d,
         )
 
+
 @fieldwise_init
 struct MaterialProperties(Copyable):
     var E: Float64
@@ -65,6 +67,7 @@ struct MaterialProperties(Copyable):
     fn dump(self):
         print("E: ", self.E)
         print("rho: ", self.rho)
+
 
 struct Matrix[size: Int](Copyable):
     var data: List[Float64]
@@ -143,8 +146,10 @@ struct Matrix[size: Int](Copyable):
                 res[i, j] = self[i, j] - other[i, j]
         return res^
 
+
 fn cot(x: Float64) -> Float64:
     return cos(x) / sin(x)
+
 
 fn csc(x: Float64) -> Float64:
     return 1.0 / sin(x)
@@ -191,33 +196,66 @@ fn get_beam_stiffness(
             d[0] = (mat.E * A * alpha * cot(alpha)) / l
             d[4] = -(mat.E * A * alpha * csc(alpha)) / l
 
-        d[1] = (mat.E * I * beta**3 * (cos(beta) * sinh(beta) + sin(beta) * cosh(beta))) / (R * l**3)
-        d[2] = -(mat.E * I * beta**2 * (sin(beta) * sinh(beta))) / (R * l**2)
-        d[3] = (mat.E * I * beta * (sin(beta) * cosh(beta) - cos(beta) * sinh(beta))) / (R * l)
-        d[5] = -(mat.E * I * beta**3 * (sin(beta) + sinh(beta))) / (R * l**3)
+        d[1] = (
+            mat.E
+            * I
+            * beta**3
+            * (cos(beta) * sinh(beta) + sin(beta) * cosh(beta))
+        ) / (R * l**3)
+        d[2] = -(mat.E * I * beta**2 * (sin(beta) * sinh(beta))) / (
+            R * l**2
+        )
+        d[3] = (
+            mat.E * I * beta * (sin(beta) * cosh(beta) - cos(beta) * sinh(beta))
+        ) / (R * l)
+        d[5] = -(mat.E * I * beta**3 * (sin(beta) + sinh(beta))) / (
+            R * l**3
+        )
         d[6] = (mat.E * I * beta**2 * (cosh(beta) - cos(beta))) / (R * l**2)
         d[7] = (mat.E * I * beta * (sinh(beta) - sin(beta))) / (R * l)
 
     var K = Matrix[6]()
-    K[0, 0] = d[0];  K[0, 3] = d[4]
-    K[1, 1] = d[1];  K[1, 2] = -d[2]; K[1, 4] = d[5];  K[1, 5] = d[6]
-    K[2, 1] = -d[2]; K[2, 2] = d[3];  K[2, 4] = -d[6];  K[2, 5] = d[7]
-    K[3, 0] = d[4];  K[3, 3] = d[0]
-    K[4, 1] = d[5];  K[4, 2] = -d[6];  K[4, 4] = d[1];  K[4, 5] = d[2]
-    K[5, 1] = d[6]; K[5, 2] = d[7];  K[5, 4] = d[2];  K[5, 5] = d[3]
+    K[0, 0] = d[0]
+    K[0, 3] = d[4]
+    K[1, 1] = d[1]
+    K[1, 2] = -d[2]
+    K[1, 4] = d[5]
+    K[1, 5] = d[6]
+    K[2, 1] = -d[2]
+    K[2, 2] = d[3]
+    K[2, 4] = -d[6]
+    K[2, 5] = d[7]
+    K[3, 0] = d[4]
+    K[3, 3] = d[0]
+    K[4, 1] = d[5]
+    K[4, 2] = -d[6]
+    K[4, 4] = d[1]
+    K[4, 5] = d[2]
+    K[5, 1] = d[6]
+    K[5, 2] = d[7]
+    K[5, 4] = d[2]
+    K[5, 5] = d[3]
 
     return K^
+
 
 fn get_rotation_matrix_z(theta: Float64) -> Matrix[3]:
     var R = Matrix[3]()
     var c = cos(theta)
     var s = sin(theta)
 
-    R[0, 0] = c;  R[0, 1] = s;  R[0, 2] = 0.0
-    R[1, 0] = -s; R[1, 1] = c;  R[1, 2] = 0.0
-    R[2, 0] = 0.0; R[2, 1] = 0.0; R[2, 2] = 1.0
+    R[0, 0] = c
+    R[0, 1] = s
+    R[0, 2] = 0.0
+    R[1, 0] = -s
+    R[1, 1] = c
+    R[1, 2] = 0.0
+    R[2, 0] = 0.0
+    R[2, 1] = 0.0
+    R[2, 2] = 1.0
 
     return R^
+
 
 fn get_rotation_matrix(theta: Float64) -> Matrix[6]:
     var R = Matrix[6]()
@@ -228,9 +266,11 @@ fn get_rotation_matrix(theta: Float64) -> Matrix[6]:
 
     return R^
 
+
 fn transform_matrix(K_hat: Matrix[6], theta: Float64) -> Matrix[6]:
     var R = get_rotation_matrix(theta)
     return R.transpose() @ K_hat @ R^
+
 
 fn inverse_2x2(M: Matrix[2]) -> Matrix[2]:
     var res = Matrix[2]()
@@ -245,6 +285,7 @@ fn inverse_2x2(M: Matrix[2]) -> Matrix[2]:
     res[1, 0] = -M[1, 0] * invDet
     res[1, 1] = M[0, 0] * invDet
     return res^
+
 
 fn inverse_3x3(M: Matrix[3]) -> Matrix[3]:
     var res = Matrix[3]()
@@ -273,6 +314,7 @@ fn inverse_3x3(M: Matrix[3]) -> Matrix[3]:
 
     return res^
 
+
 fn get_submatrix_3x3(K: Matrix[6], row_start: Int, col_start: Int) -> Matrix[3]:
     var res = Matrix[3]()
     for i in range(3):
@@ -280,10 +322,14 @@ fn get_submatrix_3x3(K: Matrix[6], row_start: Int, col_start: Int) -> Matrix[3]:
             res[i, j] = K[row_start + i, col_start + j]
     return res^
 
-fn set_submatrix_3x3(mut K: Matrix[6], block: Matrix[3], row_start: Int, col_start: Int):
+
+fn set_submatrix_3x3(
+    mut K: Matrix[6], block: Matrix[3], row_start: Int, col_start: Int
+):
     for i in range(3):
         for j in range(3):
             K[row_start + i, col_start + j] = block[i, j]
+
 
 fn get_transfer_from_stiffness(K: Matrix[6]) -> Matrix[6]:
     var k11 = get_submatrix_3x3(K, 0, 0)
@@ -310,6 +356,7 @@ fn get_transfer_from_stiffness(K: Matrix[6]) -> Matrix[6]:
 
     return T^
 
+
 fn get_stiffness_from_transfer(T: Matrix[6]) -> Matrix[6]:
     var t11 = get_submatrix_3x3(T, 0, 0)
     var t12 = get_submatrix_3x3(T, 0, 3)
@@ -335,7 +382,10 @@ fn get_stiffness_from_transfer(T: Matrix[6]) -> Matrix[6]:
 
     return K^
 
-fn assemble_system_matrix_limb(mat: MaterialProperties, geom: GeometricParameters, omega: Float64) -> Matrix[6]:
+
+fn assemble_system_matrix_limb(
+    mat: MaterialProperties, geom: GeometricParameters, omega: Float64
+) -> Matrix[6]:
     # Beam 1
     var K1_hat = get_beam_stiffness(mat, geom, omega, geom.L_1, geom.h_1)
     var K1 = transform_matrix(K1_hat, geom.theta_1)
@@ -362,13 +412,18 @@ fn assemble_system_matrix_limb(mat: MaterialProperties, geom: GeometricParameter
 
     return K_limb^
 
-fn set_submatrix_9x9(mut K: Matrix[9], block: Matrix[3], row_start: Int, col_start: Int):
+
+fn set_submatrix_9x9(
+    mut K: Matrix[9], block: Matrix[3], row_start: Int, col_start: Int
+):
     for i in range(3):
         for j in range(3):
             K[row_start + i, col_start + j] = block[i, j]
 
 
-fn assemble_full_system_matrix(mat: MaterialProperties, geom: GeometricParameters, omega: Float64) -> Matrix[9]:
+fn assemble_full_system_matrix(
+    mat: MaterialProperties, geom: GeometricParameters, omega: Float64
+) -> Matrix[9]:
     # Limb 1 (top left, 1st quadrant)
     var geom1 = geom.clone()
     var K_limb1 = assemble_system_matrix_limb(mat, geom1, omega)
@@ -435,6 +490,7 @@ fn assemble_full_system_matrix(mat: MaterialProperties, geom: GeometricParameter
 
     return K_sys^
 
+
 fn solve_static_response_9x9(K_sys: Matrix[9], F: Matrix[9]) -> Matrix[9]:
     var A = K_sys.clone()
     var B = F.clone()
@@ -472,7 +528,12 @@ fn solve_static_response_9x9(K_sys: Matrix[9], F: Matrix[9]) -> Matrix[9]:
         X[i, 0] = (B[i, 0] - sum) / A[i, i]
     return X^
 
-fn calculate_amplification_ratio(mat: MaterialProperties, geom: GeometricParameters, use_single_sided: Bool = False) -> Float64:
+
+fn calculate_amplification_ratio(
+    mat: MaterialProperties,
+    geom: GeometricParameters,
+    use_single_sided: Bool = False,
+) -> Float64:
     var K_sys = assemble_full_system_matrix(mat, geom, 0.0)
 
     var F = Matrix[9]()
@@ -491,13 +552,18 @@ fn calculate_amplification_ratio(mat: MaterialProperties, geom: GeometricParamet
 
     # Differential Convention: Output / Total Input Stroke
     var ratio = x_out_y / (x_in1_x - x_in2_x)
-    
+
     if use_single_sided:
         return ratio * 2.0
-    
+
     return ratio
 
-fn calculate_input_stiffness(mat: MaterialProperties, geom: GeometricParameters, use_single_sided: Bool = False) -> Float64:
+
+fn calculate_input_stiffness(
+    mat: MaterialProperties,
+    geom: GeometricParameters,
+    use_single_sided: Bool = False,
+) -> Float64:
     var K_sys = assemble_full_system_matrix(mat, geom, 0.0)
 
     var F = Matrix[9]()
@@ -511,15 +577,16 @@ fn calculate_input_stiffness(mat: MaterialProperties, geom: GeometricParameters,
     var x_in2_x = X[3, 0]
 
     if abs(x_in1_x - x_in2_x) < 1e-12:
-        return 1e20 # Rigid
+        return 1e20  # Rigid
 
     # Differential Convention: Force / Total Input Stroke
     var k_in = f / (x_in1_x - x_in2_x)
-    
+
     if use_single_sided:
         return k_in * 2.0
-        
+
     return k_in
+
 
 fn determinant_9x9(K: Matrix[9]) -> Float64:
     var A = K.clone()
@@ -553,6 +620,7 @@ fn determinant_9x9(K: Matrix[9]) -> Float64:
 
     return det
 
+
 fn calculate_natural_frequencies(
     mat: MaterialProperties,
     geom: GeometricParameters,
@@ -561,7 +629,7 @@ fn calculate_natural_frequencies(
     m_in: Float64,
 ) -> List[Float64]:
     var start_f = 100.0
-    var end_f = 10000.0
+    var end_f = 100000.0
     var step_f = 10.0
 
     var frequencies = List[Float64]()
