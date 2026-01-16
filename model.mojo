@@ -588,6 +588,45 @@ fn calculate_input_stiffness(
     return k_in
 
 
+fn calculate_output_stiffness(
+    mat: MaterialProperties,
+    geom: GeometricParameters,
+) -> Float64:
+    """
+    Calculate output stiffness K_out per paper Eq. (A4).
+
+    Output stiffness is defined as K_out = F_out / x_out when F_in = 0.
+    This measures the stiffness seen at the output port when pushing on it
+    with both input ports free (unactuated).
+
+    Args:
+        mat: Material properties.
+        geom: Geometric parameters.
+
+    Returns:
+        Output stiffness in N/m.
+    """
+    var K_sys = assemble_full_system_matrix(mat, geom, 0.0)
+
+    # Apply unit force at output port in y-direction (DOF 7)
+    # Inputs are free (no forces applied at DOFs 0-5)
+    var F = Matrix[9]()
+    var f = 100.0
+    F[7, 0] = f  # Force at output y-direction
+
+    var X = solve_static_response_9x9(K_sys, F)
+
+    var x_out_y = X[7, 0]
+
+    if abs(x_out_y) < 1e-12:
+        return 1e20  # Rigid
+
+    # Output stiffness: Force / Output displacement
+    var k_out = f / x_out_y
+
+    return k_out
+
+
 fn determinant_9x9(K: Matrix[9]) -> Float64:
     var A = K.clone()
     var n = 9

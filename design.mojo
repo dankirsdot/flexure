@@ -230,7 +230,8 @@ struct DesignResult(Copyable, Movable):
     var h_flex_mm: Float64
     var H_mm: Float64  # Vertical offset in mm (for parallel amplifier)
     var ratio: Float64
-    var stiffness: Float64  # N/um
+    var stiffness: Float64  # N/um (input stiffness)
+    var output_stiffness: Float64  # N/um
     var f1: Float64
     var f2: Float64
     var f3: Float64
@@ -243,6 +244,7 @@ struct DesignResult(Copyable, Movable):
         self.H_mm = 0.0
         self.ratio = 0.0
         self.stiffness = 0.0
+        self.output_stiffness = 0.0
         self.f1 = 0.0
         self.f2 = 0.0
         self.f3 = 0.0
@@ -255,6 +257,7 @@ struct DesignResult(Copyable, Movable):
         self.H_mm = existing.H_mm
         self.ratio = existing.ratio
         self.stiffness = existing.stiffness
+        self.output_stiffness = existing.output_stiffness
         self.f1 = existing.f1
         self.f2 = existing.f2
         self.f3 = existing.f3
@@ -267,6 +270,7 @@ struct DesignResult(Copyable, Movable):
         self.H_mm = existing.H_mm
         self.ratio = existing.ratio
         self.stiffness = existing.stiffness
+        self.output_stiffness = existing.output_stiffness
         self.f1 = existing.f1
         self.f2 = existing.f2
         self.f3 = existing.f3
@@ -281,6 +285,7 @@ struct DesignResult(Copyable, Movable):
         result.H_mm = self.H_mm
         result.ratio = self.ratio
         result.stiffness = self.stiffness
+        result.output_stiffness = self.output_stiffness
         result.f1 = self.f1
         result.f2 = self.f2
         result.f3 = self.f3
@@ -344,6 +349,7 @@ fn run_2d_sweep(
                 result.H_mm = 0.0
             result.ratio = analysis.amplification_ratio
             result.stiffness = analysis.input_stiffness / 1.0e6  # N/um
+            result.output_stiffness = analysis.output_stiffness / 1.0e6  # N/um
             result.f1 = analysis.f1()
             result.f2 = analysis.f2()
             result.f3 = analysis.f3()
@@ -378,9 +384,9 @@ fn plot_ratio_stiffness_contours(
     d_mm: Float64,
 ) raises:
     """
-    Generate 2-panel contour plot for ratio and stiffness.
+    Generate 3-panel contour plot for ratio and stiffness.
 
-    Panels: (a) Amplification Ratio, (b) Input Stiffness
+    Panels: (a) Amplification Ratio, (b) Input Stiffness, (c) Output Stiffness
     For parallel amplifiers, saves both theta and H versions.
     """
     var plt = Python.import_module("matplotlib.pyplot")
@@ -405,22 +411,27 @@ fn plot_ratio_stiffness_contours(
     # Build 2D data as nested Python lists
     var ratio_rows = builtins.list()
     var stiff_rows = builtins.list()
+    var out_stiff_rows = builtins.list()
 
     for i in range(THETA_STEPS):
         var ratio_row = builtins.list()
         var stiff_row = builtins.list()
+        var out_stiff_row = builtins.list()
 
         for j in range(H_FLEX_STEPS):
             var idx = i * H_FLEX_STEPS + j
             ratio_row.append(results[idx].ratio)
             stiff_row.append(results[idx].stiffness)
+            out_stiff_row.append(results[idx].output_stiffness)
 
         ratio_rows.append(ratio_row)
         stiff_rows.append(stiff_row)
+        out_stiff_rows.append(out_stiff_row)
 
     # Convert to numpy arrays
     var ratio_grid = np.abs(np.array(ratio_rows))
     var stiff_grid = np.array(stiff_rows)
+    var out_stiff_grid = np.array(out_stiff_rows)
 
     var d_str = String(d_mm)
 
@@ -430,10 +441,10 @@ fn plot_ratio_stiffness_contours(
         x_label: String,
         filename_suffix: String,
     ) raises:
-        var fig_info = plt.subplots(1, 2)
+        var fig_info = plt.subplots(1, 3)
         var fig = fig_info[0]
         var axes = fig_info[1]
-        fig.set_size_inches(10, 5)
+        fig.set_size_inches(15, 5)
 
         fig.suptitle(
             structure.upper()
@@ -460,6 +471,14 @@ fn plot_ratio_stiffness_contours(
         ax2.set_xlabel(x_label)
         ax2.set_ylabel(String("h_flex (mm)"))
         ax2.set_title(String("(b) Input Stiffness (N/um)"))
+
+        # Subplot (c): Output Stiffness
+        var ax3 = axes[2]
+        var c3 = ax3.contourf(x_vals, h_vals, out_stiff_grid.T, 20)
+        plt.colorbar(c3, ax=ax3)
+        ax3.set_xlabel(x_label)
+        ax3.set_ylabel(String("h_flex (mm)"))
+        ax3.set_title(String("(c) Output Stiffness (N/um)"))
 
         plt.tight_layout()
 

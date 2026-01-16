@@ -22,6 +22,7 @@ from model import (
     GeometricParameters,
     calculate_amplification_ratio,
     calculate_input_stiffness,
+    calculate_output_stiffness,
     calculate_natural_frequencies,
 )
 
@@ -112,16 +113,22 @@ struct AmplifierResults(Copyable, Movable):
 
     var amplification_ratio: Float64
     var input_stiffness: Float64
+    var output_stiffness: Float64
     var natural_frequencies: List[Float64]
 
     fn __init__(out self):
         """Create empty results (for initialization)."""
         self.amplification_ratio = 0.0
         self.input_stiffness = 0.0
+        self.output_stiffness = 0.0
         self.natural_frequencies = List[Float64]()
 
     fn __init__(
-        out self, ratio: Float64, stiffness: Float64, var freqs: List[Float64]
+        out self,
+        ratio: Float64,
+        stiffness: Float64,
+        k_out: Float64,
+        var freqs: List[Float64],
     ):
         """
         Create results with specified values.
@@ -129,16 +136,19 @@ struct AmplifierResults(Copyable, Movable):
         Args:
             ratio: Amplification ratio.
             stiffness: Input stiffness (N/m).
+            k_out: Output stiffness (N/m).
             freqs: Natural frequencies (Hz).
         """
         self.amplification_ratio = ratio
         self.input_stiffness = stiffness
+        self.output_stiffness = k_out
         self.natural_frequencies = freqs^
 
     fn __copyinit__(out self, existing: Self):
         """Copy constructor."""
         self.amplification_ratio = existing.amplification_ratio
         self.input_stiffness = existing.input_stiffness
+        self.output_stiffness = existing.output_stiffness
         self.natural_frequencies = List[Float64](
             capacity=len(existing.natural_frequencies)
         )
@@ -149,6 +159,7 @@ struct AmplifierResults(Copyable, Movable):
         """Move constructor."""
         self.amplification_ratio = existing.amplification_ratio
         self.input_stiffness = existing.input_stiffness
+        self.output_stiffness = existing.output_stiffness
         self.natural_frequencies = existing.natural_frequencies^
 
     fn dump(self):
@@ -159,6 +170,8 @@ struct AmplifierResults(Copyable, Movable):
         print("Amplification Ratio:", self.amplification_ratio)
         print("Input Stiffness:", self.input_stiffness, "N/m")
         print("                ", self.input_stiffness / 1.0e6, "N/um")
+        print("Output Stiffness:", self.output_stiffness, "N/m")
+        print("                 ", self.output_stiffness / 1.0e6, "N/um")
         print("Natural Frequencies:")
         for i in range(len(self.natural_frequencies)):
             print("  Mode", i + 1, ":", self.natural_frequencies[i], "Hz")
@@ -226,10 +239,11 @@ fn compute_results(
     # Static analysis
     var ratio = calculate_amplification_ratio(mat, geom, single_sided)
     var stiffness = calculate_input_stiffness(mat, geom, single_sided)
+    var k_out = calculate_output_stiffness(mat, geom)
 
     # Dynamic analysis
     var freqs = calculate_natural_frequencies(
         mat, geom, output_mass.m, output_mass.J, input_mass
     )
 
-    return AmplifierResults(ratio, stiffness, freqs^)
+    return AmplifierResults(ratio, stiffness, k_out, freqs^)
